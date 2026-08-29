@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#0d0d0f;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:100vh; gap:24px; font-family:'DM Mono',monospace;
+  overflow:hidden;
+}
+.status {
+  font-size:12px; color:#fbbf24; letter-spacing:0.12em;
+  transition:opacity 0.3s; min-height:18px;
+}
+.stage {
+  width:560px; height:440px;
+  position:relative;
+  display:flex; align-items:flex-end; justify-content:center;
+  padding-bottom:40px;
+}
+
+/* LAPTOP WRAPPER - slight 3D desk tilt */
+.laptop {
+  position:relative;
+}
+
+/* BASE */
+.base {
+  width:480px; height:26px;
+  background:linear-gradient(180deg,#2a2a30,#1a1a1e);
+  border:1.5px solid #3a3a40;
+  border-radius:3px 3px 10px 10px;
+  position:relative;
+  box-shadow:0 8px 20px rgba(0,0,0,0.6);
+  z-index:2;
+}
+.base::after {
+  content:''; position:absolute; left:50%; top:8px;
+  transform:translateX(-50%);
+  width:55px; height:4px; background:#111; border-radius:2px;
+}
+
+/* LID WRAPPER - perspective container, hinged at bottom */
+.lid-wrap {
+  width:480px;
+  height:300px;
+  position:relative;
+  overflow:visible;
+  perspective:2000px;
+  perspective-origin:50% 110%;
+  transition:perspective 0.15s ease;
+}
+
+.lid-wrap.closing {
+  perspective:4500px;
+}
+
+.lid-wrap.closed {
+  perspective:99999px;
+  perspective-origin:50% 50%;
+}
+
+/* LID - the actual panel that rotates */
+.lid {
+  width:460px;
+  height:295px;
+  position:absolute;
+  bottom:0;
+  left:10px;
+  transform-origin:bottom center;
+  transform-style:preserve-3d;
+  transform:rotateX(13deg);
+  transition:transform 1.5s cubic-bezier(0.4,0,0.2,1);
+}
+
+.lid-face {
+  position:absolute; inset:0;
+  background:linear-gradient(175deg,#1e1e26,#141418);
+  border:none;
+  border-radius:8px 8px 2px 2px;
+  overflow:hidden;
+  box-shadow:0 -4px 16px rgba(0,0,0,0.5);
+}
+
+
+.screen {
+  margin:10px; height:calc(100% - 20px);
+  background:#040407; border-radius:4px;
+  padding:14px 16px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.sline {
+  font-size:11px; color:#6ee7b7; line-height:1.6;
+  opacity:0; transform:translateY(5px);
+  transition:opacity 0.4s, transform 0.4s;
+}
+.sline.show { opacity:1; transform:none; }
+
+/* The back of the lid (dark, no content needed) */
+
+
+/* BACK PANEL */
+#backPanel {
+  position:absolute;
+  bottom:26px; left:0;
+  width:480px; height:300px;
+  background:linear-gradient(145deg,#18181c,#1c1c22);
+  border:1.5px solid #2a2a30;
+  border-radius:8px;
+  opacity:0; pointer-events:none;
+  overflow:visible;
+  transition:opacity 0.5s, transform 0.9s;
+  box-shadow:0 16px 36px rgba(0,0,0,0.6);
+}
+.b-label { position:absolute; top:12px; left:16px; font-size:9px; color:#2a2a36; letter-spacing:0.1em; }
+.b-vents { position:absolute; bottom:20px; right:20px; display:flex; gap:5px; }
+.b-vent { width:10px; height:48px; background:#0e0e12; border-radius:2px; border:1px solid #1c1c22; }
+
+/* SCREWS */
+.screw { position:absolute; width:22px; height:22px; opacity:0; transition:opacity 0.3s; }
+.screw-head {
+  width:22px; height:22px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #4a4a56,#1e1e26);
+  border:1px solid #3e3e4a;
+  box-shadow:inset 0 1px 2px rgba(255,255,255,0.07), 0 2px 6px rgba(0,0,0,0.7);
+  position:relative;
+}
+/* inner layer that spins - separate from the lit head */
+.screw-cross { position:absolute; inset:0; border-radius:50%; }
+.screw-cross::before,.screw-cross::after {
+  content:''; position:absolute; border-radius:1px;
+  left:50%; top:50%; transform:translate(-50%,-50%);
+}
+.screw-cross::before { width:13px; height:2.5px; background:linear-gradient(180deg,#2a2a32,#444450); box-shadow:0 1px 2px rgba(0,0,0,0.8); }
+.screw-cross::after  { width:2.5px; height:13px; background:linear-gradient(90deg,#2a2a32,#444450); box-shadow:1px 0 2px rgba(0,0,0,0.8); }
+/* only spin the cross, not the head so lighting stays static */
+.screw.spinning .screw-cross { animation:sc 0.15s linear infinite; }
+.screw.spinning .screw-head { animation:none; }
+@keyframes sc { to { transform:rotate(360deg); } }
+
+/* INTERNALS */
+#internals {
+  position:absolute; bottom:26px; left:0;
+  width:480px; height:300px;
+  opacity:0; pointer-events:none; transition:opacity 0.9s;
+}
+.fan-group { animation:fan 0.25s linear infinite; }
+.fan-group2 { animation:fan2 0.25s linear infinite; }
+@keyframes fan2 { to { transform:rotate(-360deg); } } /* spins opposite */
+@keyframes fan { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="status" id="status">DEVICE DETECTED</div>
+<div class="stage">
+  <div class="laptop" id="laptop">
+
+    <div class="lid-wrap">
+      <!-- BACK PANEL -->
+      <div id="backPanel">
+        <div class="b-label">SERVICE PANEL · FW-LP-001</div>
+        <div class="b-vents">
+          <div class="b-vent"></div><div class="b-vent"></div>
+          <div class="b-vent"></div><div class="b-vent"></div>
+          <div class="b-vent"></div>
+        </div>
+        <!-- SCREWS -->
+        <div class="screw" id="sc0" style="top:12px;left:14px"><div class="screw-head"><div class="screw-cross"></div></div></div>
+        <div class="screw" id="sc1" style="top:12px;right:14px"><div class="screw-head"><div class="screw-cross"></div></div></div>
+        <div class="screw" id="sc2" style="top:138px;left:14px"><div class="screw-head"><div class="screw-cross"></div></div></div>
+        <div class="screw" id="sc3" style="top:138px;right:14px"><div class="screw-head"><div class="screw-cross"></div></div></div>
+        <div class="screw" id="sc4" style="bottom:12px;left:14px"><div class="screw-head"><div class="screw-cross"></div></div></div>
+        <div class="screw" id="sc5" style="bottom:12px;right:14px"><div class="screw-head"><div class="screw-cross"></div></div></div>
+      </div>
+      <!-- INTERNALS -->
+      <div id="internals">
+        <svg width="480" height="300" viewBox="0 0 480 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="hg"><stop offset="0%" stop-color="rgba(251,100,0,0.12)"/><stop offset="100%" stop-color="transparent"/></radialGradient>
+    <radialGradient id="hg2"><stop offset="0%" stop-color="rgba(100,180,251,0.08)"/><stop offset="100%" stop-color="transparent"/></radialGradient>
+  </defs>
+
+  <!-- CASE/chassis - dark background -->
+  <rect width="480" height="300" fill="#111114" rx="8"/>
+  <rect x="4" y="4" width="472" height="292" fill="none" stroke="#222228" stroke-width="0.5" rx="6"/>
+
+  <!-- MOBO - full blue PCB from top to battery, extends under heatsink area -->
+  <rect x="8" y="10" width="464" height="218" fill="#071220" stroke="#0d1e3a" stroke-width="1" rx="3"/>
+  <!-- PCB subtle gradient layers -->
+  <rect x="8" y="10" width="464" height="218" fill="url(#pcbgrad)" rx="3" opacity="0.4"/>
+  <defs>
+    <linearGradient id="pcbgrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a1830"/>
+      <stop offset="50%" stop-color="#071220"/>
+      <stop offset="100%" stop-color="#0a1828"/>
+    </linearGradient>
+  </defs>
+  <!-- PCB silk screen layer - white text/markings -->
+  <g font-family="monospace" font-size="5" fill="#0d2a18" opacity="0.8">
+    <text x="20" y="200">J1</text><text x="40" y="200">J2</text>
+    <text x="380" y="200">PCB REV 1.2</text>
+    <text x="200" y="210">FW-MB-001</text>
+    <text x="100" y="75">U4</text><text x="360" y="75">U7</text>
+    <text x="60" y="175">C14</text><text x="400" y="175">C28</text>
+    <text x="240" y="85">UE1</text>
+  </g>
+
+  <!-- ═══ DENSE PCB TRACES everywhere ═══ -->
+  <g stroke="#0d2a40" stroke-width="0.8" fill="none">
+    <!-- horizontal power rails -->
+    <line x1="8" y1="72" x2="472" y2="72"/>
+    <line x1="8" y1="225" x2="472" y2="225"/>
+    <!-- left side traces -->
+    <polyline points="14,80 14,90 30,90 36,96"/>
+    <polyline points="14,96 25,96 25,110 14,110"/>
+    <polyline points="14,120 45,120 45,130 30,130 30,145 14,145"/>
+    <polyline points="30,90 30,100 60,100 66,106 80,106"/>
+    <polyline points="60,100 60,115 80,115 86,121"/>
+    <polyline points="80,106 80,90 100,90 106,84"/>
+    <!-- right side traces -->
+    <polyline points="466,80 466,90 450,90 444,96"/>
+    <polyline points="466,110 440,110 434,116 420,116"/>
+    <polyline points="450,90 450,105 430,105 424,111"/>
+    <polyline points="430,130 430,145 450,145 456,151"/>
+    <polyline points="420,116 420,130 400,130 394,124"/>
+    <!-- center traces -->
+    <polyline points="200,72 200,80 185,80"/>
+    <polyline points="240,72 240,80 255,80"/>
+    <polyline points="220,72 220,90 200,90 194,96"/>
+    <polyline points="260,72 260,90 280,90 286,96"/>
+    <polyline points="200,170 200,185 180,185 174,191"/>
+    <polyline points="280,170 280,185 300,185 306,191"/>
+    <polyline points="240,170 240,200 200,200 194,206"/>
+    <!-- bottom traces -->
+    <polyline points="14,200 50,200 56,194 80,194"/>
+    <polyline points="466,200 430,200 424,194 400,194"/>
+    <polyline points="100,218 100,210 150,210 156,216"/>
+    <polyline points="380,218 380,210 330,210 324,216"/>
+    <!-- via dots -->
+    <circle cx="36" cy="96" r="2" fill="#0d2a40"/>
+    <circle cx="86" cy="121" r="2" fill="#0d2a40"/>
+    <circle cx="106" cy="84" r="2" fill="#0d2a40"/>
+    <circle cx="444" cy="96" r="2" fill="#0d2a40"/>
+    <circle cx="424" cy="111" r="2" fill="#0d2a40"/>
+    <circle cx="194" cy="96" r="2" fill="#0d2a40"/>
+    <circle cx="174" cy="191" r="2" fill="#0d2a40"/>
+    <circle cx="306" cy="191" r="2" fill="#0d2a40"/>
+  </g>
+
+  <!-- ═══ COMPONENT CLUSTERS ═══ -->
+
+  <!-- VRM bank left of CPU - big chunky MOSFETs -->
+  <g fill="#0f1e0f" stroke="#1a3a1a" stroke-width="0.8">
+    <rect x="130" y="80" width="10" height="14" rx="1"/>
+    <rect x="144" y="80" width="10" height="14" rx="1"/>
+    <rect x="130" y="98" width="10" height="14" rx="1"/>
+    <rect x="144" y="98" width="10" height="14" rx="1"/>
+    <rect x="130" y="116" width="10" height="14" rx="1"/>
+    <rect x="144" y="116" width="10" height="14" rx="1"/>
+  </g>
+  <text x="137" y="77" text-anchor="middle" font-family="monospace" font-size="5" fill="#2a5a2a">VRM</text>
+
+  <!-- VRM bank right of GPU -->
+  <g fill="#0f0f1e" stroke="#1a1a3a" stroke-width="0.8">
+    <rect x="336" y="80" width="10" height="14" rx="1"/>
+    <rect x="350" y="80" width="10" height="14" rx="1"/>
+    <rect x="336" y="98" width="10" height="14" rx="1"/>
+    <rect x="350" y="98" width="10" height="14" rx="1"/>
+    <rect x="336" y="116" width="10" height="14" rx="1"/>
+    <rect x="350" y="116" width="10" height="14" rx="1"/>
+  </g>
+  <text x="343" y="77" text-anchor="middle" font-family="monospace" font-size="5" fill="#2a2a5a">VRM</text>
+
+  <!-- Inductor coils near VRMs -->
+  <circle cx="122" cy="87" r="6" fill="none" stroke="#2a4a2a" stroke-width="2"/>
+  <circle cx="122" cy="87" r="3" fill="#0f1e0f"/>
+  <circle cx="122" cy="107" r="6" fill="none" stroke="#2a4a2a" stroke-width="2"/>
+  <circle cx="122" cy="107" r="3" fill="#0f1e0f"/>
+  <circle cx="358" cy="87" r="6" fill="none" stroke="#2a2a4a" stroke-width="2"/>
+  <circle cx="358" cy="87" r="3" fill="#0f0f1e"/>
+  <circle cx="358" cy="107" r="6" fill="none" stroke="#2a2a4a" stroke-width="2"/>
+  <circle cx="358" cy="107" r="3" fill="#0f0f1e"/>
+
+  <!-- Capacitor forest left side -->
+  <g fill="#0a180a" stroke="#1a3a1a" stroke-width="0.6">
+    <rect x="16" y="80" width="5" height="8" rx="1"/><rect x="23" y="80" width="5" height="8" rx="1"/>
+    <rect x="30" y="80" width="5" height="8" rx="1"/><rect x="16" y="92" width="5" height="8" rx="1"/>
+    <rect x="23" y="92" width="5" height="8" rx="1"/><rect x="30" y="92" width="5" height="8" rx="1"/>
+    <rect x="16" y="104" width="5" height="8" rx="1"/><rect x="23" y="104" width="5" height="8" rx="1"/>
+    <rect x="16" y="116" width="5" height="12" rx="1"/><rect x="23" y="116" width="5" height="12" rx="1"/>
+    <rect x="30" y="116" width="5" height="12" rx="1"/>
+  </g>
+
+  <!-- Capacitor forest right side -->
+  <g fill="#0a0a18" stroke="#1a1a3a" stroke-width="0.6">
+    <rect x="454" y="80" width="5" height="8" rx="1"/><rect x="447" y="80" width="5" height="8" rx="1"/>
+    <rect x="440" y="80" width="5" height="8" rx="1"/><rect x="454" y="92" width="5" height="8" rx="1"/>
+    <rect x="447" y="92" width="5" height="8" rx="1"/><rect x="440" y="92" width="5" height="8" rx="1"/>
+    <rect x="454" y="104" width="5" height="8" rx="1"/><rect x="447" y="104" width="5" height="8" rx="1"/>
+    <rect x="454" y="116" width="5" height="12" rx="1"/><rect x="447" y="116" width="5" height="12" rx="1"/>
+    <rect x="440" y="116" width="5" height="12" rx="1"/>
+  </g>
+
+  <!-- BIOS chip -->
+  <rect x="16" y="155" width="22" height="16" fill="#0f1418" stroke="#2a3a4a" stroke-width="0.8" rx="1"/>
+  <text x="27" y="165" text-anchor="middle" font-family="monospace" font-size="5" fill="#2a4a5a">BIOS</text>
+  <!-- BIOS pins -->
+  <g stroke="#1a2a3a" stroke-width="0.5">
+    <line x1="16" y1="159" x2="12" y2="159"/><line x1="16" y1="163" x2="12" y2="163"/>
+    <line x1="16" y1="167" x2="12" y2="167"/>
+    <line x1="38" y1="159" x2="42" y2="159"/><line x1="38" y1="163" x2="42" y2="163"/>
+    <line x1="38" y1="167" x2="42" y2="167"/>
+  </g>
+
+  <!-- EC / Embedded Controller -->
+  <rect x="420" y="155" width="28" height="20" fill="#0f1418" stroke="#2a3a4a" stroke-width="0.8" rx="1"/>
+  <text x="434" y="167" text-anchor="middle" font-family="monospace" font-size="5" fill="#2a4a5a">EC</text>
+
+  <!-- Audio codec chip -->
+  <rect x="60" y="155" width="20" height="20" fill="#111418" stroke="#2a3040" stroke-width="0.8" rx="1"/>
+  <text x="70" y="164" text-anchor="middle" font-family="monospace" font-size="4.5" fill="#2a3050">AUD</text>
+  <text x="70" y="172" text-anchor="middle" font-family="monospace" font-size="4" fill="#1a2040">CODEC</text>
+
+  <!-- USB hub IC -->
+  <rect x="390" y="155" width="24" height="18" fill="#0f1014" stroke="#252030" stroke-width="0.8" rx="1"/>
+  <text x="402" y="166" text-anchor="middle" font-family="monospace" font-size="4.5" fill="#252040">USB HUB</text>
+
+  <!-- Tiny resistor arrays everywhere -->
+  <g fill="#0a1010" stroke="#152020" stroke-width="0.4">
+    <rect x="88" y="82" width="8" height="3" rx="0.5"/>
+    <rect x="88" y="88" width="8" height="3" rx="0.5"/>
+    <rect x="88" y="94" width="8" height="3" rx="0.5"/>
+    <rect x="88" y="100" width="8" height="3" rx="0.5"/>
+    <rect x="88" y="106" width="8" height="3" rx="0.5"/>
+    <rect x="375" y="82" width="8" height="3" rx="0.5"/>
+    <rect x="375" y="88" width="8" height="3" rx="0.5"/>
+    <rect x="375" y="94" width="8" height="3" rx="0.5"/>
+    <rect x="375" y="100" width="8" height="3" rx="0.5"/>
+    <rect x="375" y="106" width="8" height="3" rx="0.5"/>
+  </g>
+
+  <!-- Power input connector bottom left -->
+  <rect x="16" y="205" width="30" height="14" fill="#1a1410" stroke="#3a2a20" stroke-width="0.8" rx="1"/>
+  <text x="31" y="214" text-anchor="middle" font-family="monospace" font-size="5" fill="#4a3a28">PWR IN</text>
+
+  <!-- Multiple ribbon cable connectors -->
+  <rect x="100" y="215" width="60" height="7" fill="#1a1a10" stroke="#3a3a18" stroke-width="0.7" rx="1"/>
+  <g stroke="#2a2a14" stroke-width="0.5">
+    <line x1="105" y1="215" x2="105" y2="222"/><line x1="109" y1="215" x2="109" y2="222"/>
+    <line x1="113" y1="215" x2="113" y2="222"/><line x1="117" y1="215" x2="117" y2="222"/>
+    <line x1="121" y1="215" x2="121" y2="222"/><line x1="125" y1="215" x2="125" y2="222"/>
+    <line x1="129" y1="215" x2="129" y2="222"/><line x1="133" y1="215" x2="133" y2="222"/>
+    <line x1="137" y1="215" x2="137" y2="222"/><line x1="141" y1="215" x2="141" y2="222"/>
+    <line x1="145" y1="215" x2="145" y2="222"/><line x1="149" y1="215" x2="149" y2="222"/>
+    <line x1="153" y1="215" x2="153" y2="222"/>
+  </g>
+  <rect x="320" y="215" width="60" height="7" fill="#1a1a10" stroke="#3a3a18" stroke-width="0.7" rx="1"/>
+  <g stroke="#2a2a14" stroke-width="0.5">
+    <line x1="325" y1="215" x2="325" y2="222"/><line x1="329" y1="215" x2="329" y2="222"/>
+    <line x1="333" y1="215" x2="333" y2="222"/><line x1="337" y1="215" x2="337" y2="222"/>
+    <line x1="341" y1="215" x2="341" y2="222"/><line x1="345" y1="215" x2="345" y2="222"/>
+    <line x1="349" y1="215" x2="349" y2="222"/><line x1="353" y1="215" x2="353" y2="222"/>
+    <line x1="357" y1="215" x2="357" y2="222"/><line x1="361" y1="215" x2="361" y2="222"/>
+    <line x1="365" y1="215" x2="365" y2="222"/><line x1="369" y1="215" x2="369" y2="222"/>
+    <line x1="373" y1="215" x2="373" y2="222"/>
+  </g>
+
+  <!-- IO ports left edge -->
+  <rect x="8" y="90" width="6" height="14" fill="#111" stroke="#2a2a2a" stroke-width="0.5" rx="1"/>
+  <rect x="8" y="108" width="6" height="14" fill="#111" stroke="#2a2a2a" stroke-width="0.5" rx="1"/>
+  <rect x="8" y="126" width="6" height="10" fill="#111" stroke="#2a2a2a" stroke-width="0.5" rx="1"/>
+  <rect x="8" y="140" width="6" height="10" fill="#1a0a0a" stroke="#3a1a1a" stroke-width="0.5" rx="1"/>
+
+  <!-- IO ports right edge -->
+  <rect x="466" y="90" width="6" height="14" fill="#111" stroke="#2a2a2a" stroke-width="0.5" rx="1"/>
+  <rect x="466" y="108" width="6" height="14" fill="#111" stroke="#2a2a2a" stroke-width="0.5" rx="1"/>
+  <rect x="466" y="126" width="6" height="14" fill="#111" stroke="#2a2a2a" stroke-width="0.5" rx="1"/>
+  <rect x="466" y="144" width="6" height="10" fill="#0a1a0a" stroke="#1a3a1a" stroke-width="0.5" rx="1"/>
+
+  <!-- random tiny QR-like chip markings -->
+  <g fill="#0d1e2e" opacity="0.6">
+    <rect x="200" y="158" width="12" height="12" rx="1"/>
+    <rect x="215" y="158" width="12" height="12" rx="1"/>
+    <rect x="253" y="158" width="12" height="12" rx="1"/>
+    <rect x="268" y="158" width="12" height="12" rx="1"/>
+  </g>
+
+  <!-- Thermal pad outlines on mobo under heatsink area -->
+  <rect x="165" y="12" width="70" height="55" fill="none" stroke="#1a3a2a" stroke-width="0.5" stroke-dasharray="3 2" rx="2"/>
+  <rect x="245" y="12" width="85" height="55" fill="none" stroke="#1a1a3a" stroke-width="0.5" stroke-dasharray="3 2" rx="2"/>
+
+  <!-- ═══ TOP ZONE: FANS + HEATSINK ═══ -->
+
+  <!-- LEFT FAN — top left corner, small, r=28 -->
+  <circle cx="72" cy="60" r="32" fill="#0a140a" stroke="#1e3a1e" stroke-width="1.5"/>
+  <circle cx="72" cy="60" r="25" fill="none" stroke="#162a16" stroke-width="0.5" stroke-dasharray="3 2"/>
+  <g class="fan-group" style="transform-origin:72px 60px">
+    <path d="M72,60 C74,47 80,39 84,35 C87,32 88,31 86,35 C82,41 78,51 75,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8"/>
+    <path d="M72,60 C74,47 80,39 84,35 C87,32 88,31 86,35 C82,41 78,51 75,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(60 72 60)"/>
+    <path d="M72,60 C74,47 80,39 84,35 C87,32 88,31 86,35 C82,41 78,51 75,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(120 72 60)"/>
+    <path d="M72,60 C74,47 80,39 84,35 C87,32 88,31 86,35 C82,41 78,51 75,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(180 72 60)"/>
+    <path d="M72,60 C74,47 80,39 84,35 C87,32 88,31 86,35 C82,41 78,51 75,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(240 72 60)"/>
+    <path d="M72,60 C74,47 80,39 84,35 C87,32 88,31 86,35 C82,41 78,51 75,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(300 72 60)"/>
+  </g>
+  <circle cx="72" cy="60" r="5" fill="#1c2a1c" stroke="#3a5a3a" stroke-width="1"/>
+
+  <!-- RIGHT FAN — top right corner, small, r=28 -->
+  <circle cx="408" cy="60" r="32" fill="#0a140a" stroke="#1e3a1e" stroke-width="1.5"/>
+  <circle cx="408" cy="60" r="25" fill="none" stroke="#162a16" stroke-width="0.5" stroke-dasharray="3 2"/>
+  <g class="fan-group2" style="transform-origin:408px 60px">
+    <path d="M408,60 C410,47 416,39 420,35 C423,32 424,31 422,35 C418,41 414,51 411,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8"/>
+    <path d="M408,60 C410,47 416,39 420,35 C423,32 424,31 422,35 C418,41 414,51 411,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(60 408 60)"/>
+    <path d="M408,60 C410,47 416,39 420,35 C423,32 424,31 422,35 C418,41 414,51 411,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(120 408 60)"/>
+    <path d="M408,60 C410,47 416,39 420,35 C423,32 424,31 422,35 C418,41 414,51 411,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(180 408 60)"/>
+    <path d="M408,60 C410,47 416,39 420,35 C423,32 424,31 422,35 C418,41 414,51 411,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(240 408 60)"/>
+    <path d="M408,60 C410,47 416,39 420,35 C423,32 424,31 422,35 C418,41 414,51 411,60 Z" fill="#1c4a1c" stroke="#2a6a2a" stroke-width="0.8" transform="rotate(300 408 60)"/>
+  </g>
+  <circle cx="408" cy="60" r="5" fill="#1c2a1c" stroke="#3a5a3a" stroke-width="1"/>
+
+  <!-- HEATSINK: S-curve dark pipes like real laptop photo -->
+  <!-- outer fin stacks on LEFT fan (vents left edge) -->
+  <rect x="8" y="98" width="16" height="88" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="0.8" rx="2"/>
+  <g stroke="#333" stroke-width="0.7">
+    <line x1="8" y1="106" x2="24" y2="106"/><line x1="8" y1="113" x2="24" y2="113"/>
+    <line x1="8" y1="120" x2="24" y2="120"/><line x1="8" y1="127" x2="24" y2="127"/>
+    <line x1="8" y1="134" x2="24" y2="134"/><line x1="8" y1="141" x2="24" y2="141"/>
+    <line x1="8" y1="148" x2="24" y2="148"/><line x1="8" y1="155" x2="24" y2="155"/>
+    <line x1="8" y1="162" x2="24" y2="162"/><line x1="8" y1="169" x2="24" y2="169"/>
+  </g>
+
+  <!-- outer fin stacks on RIGHT fan (vents right edge) -->
+  <rect x="456" y="98" width="16" height="88" fill="#1a1a1a" stroke="#2a2a2a" stroke-width="0.8" rx="2"/>
+  <g stroke="#333" stroke-width="0.7">
+    <line x1="456" y1="106" x2="472" y2="106"/><line x1="456" y1="113" x2="472" y2="113"/>
+    <line x1="456" y1="120" x2="472" y2="120"/><line x1="456" y1="127" x2="472" y2="127"/>
+    <line x1="456" y1="134" x2="472" y2="134"/><line x1="456" y1="141" x2="472" y2="141"/>
+    <line x1="456" y1="148" x2="472" y2="148"/><line x1="456" y1="155" x2="472" y2="155"/>
+    <line x1="456" y1="162" x2="472" y2="162"/><line x1="456" y1="169" x2="472" y2="169"/>
+  </g>
+
+  <!-- HEATSINK: gunmetal flat-dip-flat, wraps over fans, 6 mounting screws -->
+
+
+
+  <!-- MAIN HEATSINK BODY - gunmetal, flat-dip-flat saddle + fan collars -->
+  <!-- LEFT fan collar - spans from fan outer left edge (x=40) to saddle start (x=118) -->
+  <rect x="40" y="8" width="78" height="30" fill="#222226" stroke="none"/>
+  <rect x="40" y="8" width="78" height="30" fill="none" stroke="#2e2e32" stroke-width="0.5"/>
+  <!-- arc at far left end wrapping around fan -->
+  <path d="M40,8 L40,38 A32,32 0 0,1 72,28" fill="#222226" stroke="none"/>
+
+  <!-- RIGHT fan collar - spans from saddle end (x=362) to fan outer right edge (x=440) -->
+  <rect x="362" y="8" width="78" height="30" fill="#222226" stroke="none"/>
+  <rect x="362" y="8" width="78" height="30" fill="none" stroke="#2e2e32" stroke-width="0.5"/>
+  <!-- arc at far right end wrapping around fan -->
+  <path d="M440,8 L440,38 A32,32 0 0,0 408,28" fill="#222226" stroke="none"/>
+
+  <!-- main gunmetal saddle body -->
+  <path d="M118,8 L162,8 C182,8 182,60 210,60 L270,60 C298,60 298,8 362,8"
+    fill="none" stroke="#0a0a0a" stroke-width="34" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M118,8 L162,8 C182,8 182,60 210,60 L270,60 C298,60 298,8 362,8"
+    fill="none" stroke="#222226" stroke-width="30" stroke-linecap="square" stroke-linejoin="round"/>
+  <!-- surface sheen top -->
+  <path d="M40,12 L155,12 C176,12 176,64 210,64 L270,64 C304,64 304,12 440,12"
+    fill="none" stroke="#3a3a40" stroke-width="1.5" stroke-linecap="square"/>
+  <!-- subtle light band across flat sections -->
+  <rect x="40" y="12" width="115" height="8" fill="url(#hsgrad)" opacity="0.3" rx="0"/>
+  <rect x="305" y="12" width="135" height="8" fill="url(#hsgrad)" opacity="0.3" rx="0"/>
+  <defs>
+    <linearGradient id="hsgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5a5a60"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </linearGradient>
+  </defs>
+
+  <!-- copper pipes running along saddle shape (visible edges) -->
+  <path d="M40,16 L155,16 C175,16 175,62 210,62 L270,62 C305,62 305,16 440,16"
+    fill="none" stroke="#7a4a18" stroke-width="5" stroke-linecap="square"/>
+  <path d="M40,16 L155,16 C175,16 175,62 210,62 L270,62 C305,62 305,16 440,16"
+    fill="none" stroke="#b87333" stroke-width="3" stroke-linecap="square"/>
+  <path d="M40,15 L155,15 C175,15 175,61 210,61 L270,61 C305,61 305,15 440,15"
+    fill="none" stroke="#e8a050" stroke-width="1" stroke-linecap="square" opacity="0.5"/>
+
+  <path d="M40,24 L155,24 C177,24 177,70 210,70 L270,70 C303,70 303,24 440,24"
+    fill="none" stroke="#7a4a18" stroke-width="5" stroke-linecap="square"/>
+  <path d="M40,24 L155,24 C177,24 177,70 210,70 L270,70 C303,70 303,24 440,24"
+    fill="none" stroke="#b87333" stroke-width="3" stroke-linecap="square"/>
+  <path d="M40,23 L155,23 C177,23 177,69 210,69 L270,69 C303,69 303,23 440,23"
+    fill="none" stroke="#e8a050" stroke-width="1" stroke-linecap="square" opacity="0.4"/>
+
+  <!-- COPPER HEAT PIPES branching from heatsink to CPU and GPU -->
+  <!-- pipe to CPU: drops down LEFT side, terminates at chip top -->
+  <path d="M155,20 L155,72" fill="none" stroke="#7a4a18" stroke-width="6" stroke-linecap="square"/>
+  <path d="M155,20 L155,72" fill="none" stroke="#b87333" stroke-width="4" stroke-linecap="square"/>
+  <path d="M155,19 L155,72" fill="none" stroke="#e8a050" stroke-width="1.2" opacity="0.5" stroke-linecap="square"/>
+
+  <!-- pipe to GPU: drops down RIGHT side, terminates at chip top -->
+  <path d="M325,20 L325,72" fill="none" stroke="#7a4a18" stroke-width="6" stroke-linecap="square"/>
+  <path d="M325,20 L325,72" fill="none" stroke="#b87333" stroke-width="4" stroke-linecap="square"/>
+  <path d="M325,19 L325,72" fill="none" stroke="#e8a050" stroke-width="1.2" opacity="0.5" stroke-linecap="square"/>
+
+  <!-- CPU → GPU bridge pipe runs between the two chips -->
+  <path d="M232,103 L248,103" fill="none" stroke="#7a4a18" stroke-width="5" stroke-linecap="round"/>
+  <path d="M232,103 L248,103" fill="none" stroke="#b87333" stroke-width="3" stroke-linecap="round"/>
+  <path d="M232,102 L248,102" fill="none" stroke="#e8a050" stroke-width="1" opacity="0.5" stroke-linecap="round"/>
+
+  <!-- ═══ MIDDLE ZONE: CPU + GPU ═══ -->
+
+  <!-- CPU — close under heatsink -->
+  <rect x="170" y="72" width="62" height="62" fill="#1c2a1c" stroke="#3a6a3a" stroke-width="1.5" rx="3"/>
+  <rect x="176" y="78" width="50" height="50" fill="#0f1a0f" stroke="#2a5a2a" stroke-width="0.8" rx="2"/>
+  <text x="201" y="106" text-anchor="middle" font-family="monospace" font-size="9" fill="#6ee7b7">CPU</text>
+  <text x="201" y="118" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6a3a">i7-1255U</text>
+  <g stroke="#1a3a1a" stroke-width="0.8">
+    <line x1="172" y1="82" x2="163" y2="82"/><line x1="172" y1="92" x2="163" y2="92"/>
+    <line x1="172" y1="102" x2="163" y2="102"/><line x1="172" y1="112" x2="163" y2="112"/><line x1="172" y1="122" x2="163" y2="122"/>
+    <line x1="230" y1="82" x2="239" y2="82"/><line x1="230" y1="92" x2="239" y2="92"/>
+    <line x1="230" y1="102" x2="239" y2="102"/><line x1="230" y1="112" x2="239" y2="112"/>
+  </g>
+  <text x="201" y="118" text-anchor="middle" font-family="monospace" font-size="5" fill="rgba(200,140,40,0.6)">⚠ dried paste</text>
+  <ellipse cx="201" cy="103" rx="42" ry="35" fill="url(#hg)"/>
+
+  <!-- GPU — solid block -->
+  <rect x="248" y="72" width="76" height="62" fill="#1a1a2a" stroke="#3a3a6a" stroke-width="1.5" rx="3"/>
+  <rect x="252" y="76" width="68" height="54" fill="#141420" rx="2"/>
+  <!-- gpu die detail lines -->
+  <g stroke="#1e1e38" stroke-width="0.5" opacity="0.6">
+    <line x1="252" y1="90" x2="320" y2="90"/>
+    <line x1="252" y1="103" x2="320" y2="103"/>
+    <line x1="252" y1="116" x2="320" y2="116"/>
+    <line x1="270" y1="76" x2="270" y2="130"/>
+    <line x1="286" y1="76" x2="286" y2="130"/>
+    <line x1="302" y1="76" x2="302" y2="130"/>
+  </g>
+  <text x="286" y="107" text-anchor="middle" font-family="monospace" font-size="10" fill="#818cf8">GPU</text>
+  <text x="286" y="119" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a3a6a">RTX 3050</text>
+  <ellipse cx="286" cy="103" rx="48" ry="35" fill="url(#hg2)"/>
+
+  <!-- ═══ LOWER ZONE: MOBO COMPONENTS ═══ -->
+
+  <!-- RAM sticks -->
+  <rect x="14" y="115" width="130" height="14" fill="#1a1a2a" stroke="#2a2a5a" stroke-width="1" rx="1"/>
+  <rect x="14" y="133" width="130" height="14" fill="#1a1a2a" stroke="#2a2a5a" stroke-width="1" rx="1"/>
+  <!-- ram chips on stick -->
+  <g fill="#111122" stroke="#2a2a4a" stroke-width="0.5">
+    <rect x="18" y="117" width="12" height="10" rx="1"/><rect x="34" y="117" width="12" height="10" rx="1"/>
+    <rect x="50" y="117" width="12" height="10" rx="1"/><rect x="66" y="117" width="12" height="10" rx="1"/>
+    <rect x="82" y="117" width="12" height="10" rx="1"/><rect x="98" y="117" width="12" height="10" rx="1"/>
+    <rect x="18" y="135" width="12" height="10" rx="1"/><rect x="34" y="135" width="12" height="10" rx="1"/>
+    <rect x="50" y="135" width="12" height="10" rx="1"/><rect x="66" y="135" width="12" height="10" rx="1"/>
+    <rect x="82" y="135" width="12" height="10" rx="1"/><rect x="98" y="135" width="12" height="10" rx="1"/>
+  </g>
+  <text x="79" y="112" text-anchor="middle" font-family="monospace" font-size="7" fill="#818cf8">RAM</text>
+
+  <!-- NVMe SSD -->
+  <rect x="356" y="112" width="110" height="30" fill="#1a1a1a" stroke="#3a3a3a" stroke-width="1" rx="1"/>
+  <g fill="#111" stroke="#2a2a2a" stroke-width="0.5">
+    <rect x="360" y="116" width="18" height="10" rx="1"/><rect x="382" y="116" width="18" height="10" rx="1"/>
+    <rect x="404" y="116" width="18" height="10" rx="1"/>
+  </g>
+  <text x="411" y="152" text-anchor="middle" font-family="monospace" font-size="7" fill="#9ca3af">NVMe</text>
+
+  <!-- WiFi card -->
+  <rect x="356" y="148" width="50" height="28" fill="#1a1a18" stroke="#3a3a28" stroke-width="1" rx="1"/>
+  <text x="381" y="166" text-anchor="middle" font-family="monospace" font-size="7" fill="#fbbf24">WiFi</text>
+
+  <!-- PCB traces -->
+  <g stroke="#1a3a1a" stroke-width="0.8" fill="none">
+
+    <polyline points="201,134 201,155 150,155 144,149 144,149"/>
+    <polyline points="286,134 286,155 350,155 356,149 356,162"/>
+    <polyline points="118,55 118,142 164,142"/>
+    <polyline points="362,55 362,142 346,142"/>
+    <circle cx="235" cy="142" r="2" fill="#1a3a1a"/>
+    <circle cx="202" cy="185" r="2" fill="#1a3a1a"/>
+    <circle cx="300" cy="185" r="2" fill="#1a3a1a"/>
+  </g>
+
+  <!-- ═══ BOTTOM ZONE: BATTERY ═══ -->
+  <rect x="14" y="192" width="452" height="96" fill="#1a1a0a" stroke="#3a3a1a" stroke-width="1.5" rx="4"/>
+  <!-- battery cells -->
+  <g fill="#161608" stroke="#2a2a12" stroke-width="0.8">
+    <rect x="20" y="198" width="66" height="84" rx="2"/>
+    <rect x="92" y="198" width="66" height="84" rx="2"/>
+    <rect x="164" y="198" width="66" height="84" rx="2"/>
+    <rect x="236" y="198" width="66" height="84" rx="2"/>
+    <rect x="308" y="198" width="66" height="84" rx="2"/>
+    <rect x="380" y="198" width="80" height="84" rx="2"/>
+  </g>
+  <!-- battery label -->
+  <text x="240" y="244" text-anchor="middle" font-family="monospace" font-size="10" fill="#fbbf24">BATTERY — 72Wh</text>
+  <text x="240" y="258" text-anchor="middle" font-family="monospace" font-size="7" fill="#5a5a20">Li-Ion · 6-cell</text>
+
+  <!-- dust particles -->
+  <g fill="rgba(150,130,100,0.5)">
+    <circle cx="150" cy="80" r="1.5"/><circle cx="320" cy="90" r="1"/>
+    <circle cx="50" cy="170" r="2"/><circle cx="430" cy="180" r="1.5"/>
+    <circle cx="200" cy="190" r="1"/>
+  </g>
+
+  <!-- ═══ CABLES ═══ -->
+
+  <!-- BATTERY CABLES - thick red and black from battery up to mobo -->
+  <path d="M80,228 L80,210 Q80,200 90,200 L130,200" fill="none" stroke="#8b0000" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M80,228 L80,210 Q80,200 90,200 L130,200" fill="none" stroke="#cc2222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M95,228 L95,215 Q95,205 105,205 L130,205" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M95,228 L95,215 Q95,205 105,205 L130,205" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- battery connector block -->
+  <rect x="128" y="197" width="14" height="12" fill="#1a1a1a" stroke="#333" stroke-width="0.8" rx="1"/>
+
+  <!-- DISPLAY CABLE - flat grey ribbon from top center down to mobo -->
+  <path d="M220,10 L220,30 Q220,40 228,40 L228,68" fill="none" stroke="#2a2a2a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M220,10 L220,30 Q220,40 228,40 L228,68" fill="none" stroke="#3a3a3a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- ribbon cable lines -->
+  <path d="M218,10 L218,30 Q218,38 226,38 L226,68" fill="none" stroke="#222" stroke-width="1" stroke-linecap="round"/>
+  <path d="M222,10 L222,30 Q222,42 230,42 L230,68" fill="none" stroke="#222" stroke-width="1" stroke-linecap="round"/>
+  <!-- display connector -->
+  <rect x="216" y="66" width="18" height="8" fill="#1a1a1a" stroke="#333" stroke-width="0.8" rx="1"/>
+
+  <!-- FAN CABLES - thin white from each fan to mobo -->
+  <!-- left fan cable -->
+  <path d="M72,88 L72,100 Q72,108 82,108 L120,108" fill="none" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M72,88 L72,100 Q72,108 82,108 L120,108" fill="none" stroke="#cccccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M74,88 L74,100 Q74,110 84,110 L120,110" fill="none" stroke="#cccccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M76,88 L76,100 Q76,112 86,112 L120,112" fill="none" stroke="#e8a050" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- fan connector -->
+  <rect x="118" y="106" width="10" height="8" fill="#1a1a1a" stroke="#333" stroke-width="0.8" rx="1"/>
+
+  <!-- right fan cable -->
+  <path d="M408,88 L408,100 Q408,108 398,108 L360,108" fill="none" stroke="#2a2a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M408,88 L408,100 Q408,108 398,108 L360,108" fill="none" stroke="#cccccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M406,88 L406,100 Q406,110 396,110 L360,110" fill="none" stroke="#cccccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M404,88 L404,100 Q404,112 394,112 L360,112" fill="none" stroke="#e8a050" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- fan connector -->
+  <rect x="352" y="106" width="10" height="8" fill="#1a1a1a" stroke="#333" stroke-width="0.8" rx="1"/>
+
+  <!-- WIFI ANTENNA CABLES - thin coax black cables from wifi card to top corners -->
+  <!-- cable 1 - left antenna -->
+  <path d="M60,168 Q40,168 28,155 Q16,142 16,120 Q16,100 22,88" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/>
+  <path d="M60,168 Q40,168 28,155 Q16,142 16,120 Q16,100 22,88" fill="none" stroke="#333" stroke-width="1" stroke-linecap="round"/>
+  <!-- cable 2 - right antenna -->
+  <path d="M75,168 Q55,165 42,150 Q30,135 30,110 Q30,95 36,85" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/>
+  <path d="M75,168 Q55,165 42,150 Q30,135 30,110 Q30,95 36,85" fill="none" stroke="#eee" stroke-width="1" stroke-linecap="round"/>
+  <!-- antenna connector dots at top -->
+  <circle cx="22" cy="88" r="3" fill="#222" stroke="#444" stroke-width="0.8"/>
+  <circle cx="36" cy="85" r="3" fill="#222" stroke="#eee" stroke-width="0.8"/>
+
+  <!-- SPEAKER CABLES - thin colored from bottom corners -->
+  <path d="M30,270 Q30,255 45,250 L80,250" fill="none" stroke="#cc4444" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M450,270 Q450,255 435,250 L400,250" fill="none" stroke="#cc4444" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
+      </div>
+      <!-- LID -->
+      <div class="lid" id="lid">
+        <div class="lid-face">
+          <div class="screen">
+            <div class="sline" id="sl0">&gt; scanning device...</div>
+            <div class="sline" id="sl1">&gt; cpu_temp: 94°C  ⚠</div>
+            <div class="sline" id="sl2">&gt; fan_rpm: TOO FAST ⚠</div>
+            <div class="sline" id="sl3">&gt; thermal_paste: DRIED</div>
+            <div class="sline" id="sl4">&gt; status: NEEDS SERVICE</div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+
+    <div class="base"></div>
+  </div>
+</div>
+<script>
+const statusEl  = document.getElementById('status');
+const lid       = document.getElementById('lid');
+const backPanel = document.getElementById('backPanel');
+const internals = document.getElementById('internals');
+const screws    = [0,1,2,3,4,5].map(i=>document.getElementById('sc'+i));
+const lines     = [0,1,2,3,4].map(i=>document.getElementById('sl'+i));
+
+function setStatus(t){ statusEl.style.opacity='0'; setTimeout(()=>{ statusEl.textContent=t; statusEl.style.opacity='1'; },350); }
+function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function spinRemove(el,ms){
+  el.classList.add('spinning');
+  await delay(ms);
+  el.classList.remove('spinning');
+  el.style.transition='transform 0.35s ease, opacity 0.35s';
+  el.style.transform='translateY(-28px) scale(0.05)';
+  el.style.opacity='0';
+  await delay(380);
+}
+
+async function run(){
+  // RESET to open state
+  document.querySelector('.lid-wrap').classList.remove('closing');
+  document.querySelector('.lid-wrap').classList.remove('closed');
+  lid.style.transition='none';
+  lid.style.transform='rotateX(13deg)';
+  lid.style.height='';
+  lid.style.opacity='1';
+  document.querySelector('.screen').style.opacity='1';
+  backPanel.style.transition='none';
+  backPanel.style.opacity='0';
+  backPanel.style.transform='';
+  internals.style.transition='none';
+  internals.style.opacity='0';
+  document.querySelector('.base').style.transition='none';
+  document.querySelector('.base').style.opacity='1';
+  screws.forEach(s=>{ s.style.transition='none'; s.style.transform=''; s.style.opacity='0'; });
+  lines.forEach(l=>l.classList.remove('show'));
+  await delay(300);
+
+  // 1. Device detected — laptop open, screen lines appear
+  setStatus('DEVICE DETECTED');
+  for(let l of lines){ l.classList.add('show'); await delay(320); }
+  await delay(1400);
+
+  // 2a. Closing closing — lid rotates with perspective depth
+  setStatus('CLOSING LID...');
+  document.querySelector('.lid-wrap').classList.add('closing');
+  lid.style.transition='transform 1.0s cubic-bezier(0.4,0,0.2,1)';
+  lid.style.transform='rotateX(-85.5deg)';
+  setTimeout(() => {
+    document.querySelector('.screen').style.transition='opacity 0.5s';
+    document.querySelector('.screen').style.opacity='0';
+  }, 600);
+  await delay(1100);
+
+  // 2b. Closing closed — perspective maxes out, screen becomes rectangle
+  document.querySelector('.lid-wrap').classList.add('closed');
+  lid.style.transition='transform 0.2s ease';
+  lid.style.transform='rotateX(-86deg)';
+  await delay(300);
+
+  // 3. Fade lid + base, show back panel
+  setStatus('FLIPPING DEVICE...');
+  lid.style.transition='opacity 0.5s';
+  lid.style.opacity='0';
+  document.querySelector('.base').style.transition='opacity 0.5s';
+  document.querySelector('.base').style.opacity='0';
+  await delay(550);
+  backPanel.style.transition='opacity 0.5s';
+  backPanel.style.opacity='1';
+  await delay(500);
+
+  // 4. Screws appear
+  setStatus('LOCATING SCREWS...');
+  for(let s of screws){ s.style.opacity='1'; await delay(140); }
+  await delay(700);
+
+  // 5. Remove screws
+  setStatus('REMOVING SCREWS...');
+  const times=[550,300,680,340,500,240];
+  for(let i=0;i<6;i++){ await spinRemove(screws[i],times[i]); await delay(60); }
+  await delay(300);
+
+  // 6. Panel lifts
+  setStatus('REMOVING BACK PANEL...');
+  backPanel.style.transition='transform 1s ease, opacity 0.8s';
+  backPanel.style.transform='translateY(-46px) scale(1.02)';
+  backPanel.style.opacity='0';
+  await delay(1100);
+
+  // 7. Internals
+  setStatus('INTERNALS REVEALED');
+  internals.style.transition='opacity 0.9s';
+  internals.style.opacity='1';
+  await delay(2800);
+  setStatus('FAN: ⚠ TOO FAST RPM');
+  await delay(2000);
+  setStatus('THERMAL PASTE: DRIED ⚠');
+  await delay(2000);
+  setStatus('→ NEEDS FW TECH SERVICE ←');
+  await delay(2500);
+
+  setStatus('RESTARTING...');
+  internals.style.transition='opacity 0.6s';
+  internals.style.opacity='0';
+  await delay(700);
+  run();
+}
+
+run();
+</script>
+</body>
+</html>
